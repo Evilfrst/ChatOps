@@ -1,5 +1,7 @@
 # ChatOps
 📁 Structure finale du projet
+
+```
 devops-chatops-project/
 ├── app/
 │   ├── main.py
@@ -14,6 +16,8 @@ devops-chatops-project/
 │       └── ci-cd.yaml
 ├── docker-compose.yml
 └── README.md
+
+```
 
 # 🤖 ChatOps DevOps – Chatbot Interne
 
