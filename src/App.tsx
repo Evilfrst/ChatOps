@@ -18,11 +18,18 @@ import {
   Search,
   Command,
   History,
-  Trash2
+  Trash2,
+  Play,
+  CheckCircle2,
+  XCircle,
+  FileCode,
+  Bell,
+  Info,
+  X
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { GoogleGenAI } from '@google/genai';
-import { Message, DevOpsState } from './types';
+import { Message, DevOpsState, Script, SecurityScan, AppNotification } from './types';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
@@ -39,9 +46,16 @@ const App: React.FC = () => {
   ]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [activeTab, setActiveTab] = useState<'chat' | 'dashboard' | 'monitoring' | 'security'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'dashboard' | 'monitoring' | 'security' | 'scripts'>('chat');
   const [showSecurityReport, setShowSecurityReport] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [scripts, setScripts] = useState<Script[]>([
+    { id: '1', name: 'System Check', path: 'src/modules/system_check.cmd', description: 'Performs a full system health and resource audit.', status: 'idle' },
+    { id: '2', name: 'Network Diagnostics', path: 'src/modules/network.cmd', description: 'Analyzes network connectivity and latency.', status: 'idle' },
+    { id: '3', name: 'Activation Module', path: 'src/modules/activation.cmd', description: 'Handles system activation and license verification.', status: 'idle' },
+    { id: '4', name: 'Security Scan', path: 'src/modules/security_scan.cmd', description: 'Scans for vulnerabilities and misconfigurations.', status: 'idle' },
+  ]);
   const [devOpsState, setDevOpsState] = useState<DevOpsState>({
     status: 'healthy',
     uptime: '15d 4h 22m',
@@ -72,6 +86,70 @@ const App: React.FC = () => {
     }, 3000);
     return () => clearInterval(interval);
   }, []);
+
+  const notify = React.useCallback((title: string, message: string, type: AppNotification['type']) => {
+    const id = Date.now().toString() + Math.random().toString(36).substring(7);
+    const newNotification: AppNotification = { id, title, message, type, timestamp: Date.now() };
+    setNotifications(prev => [newNotification, ...prev]);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    }, 5000);
+  }, []);
+
+  const runScript = React.useCallback((id: string) => {
+    setScripts(prev => prev.map(s => s.id === id ? { ...s, status: 'running' } : s));
+    
+    const scriptToRun = scripts.find(s => s.id === id);
+    if (scriptToRun) {
+      notify('Script Started', `Execution of [${scriptToRun.name}] has initiated.`, 'info');
+    }
+
+    // Simulate script execution
+    setTimeout(() => {
+      const success = Math.random() > 0.1;
+      setScripts(prev => {
+        const updated = prev.map(s => s.id === id ? { 
+          ...s, 
+          status: success ? 'success' : 'error' as any,
+          lastRun: Date.now()
+        } : s);
+        
+        const script = updated.find(s => s.id === id);
+        if (script) {
+          notify(
+            success ? 'Script Success' : 'Script Error',
+            `[${script.name}] ${success ? 'completed successfully' : 'failed to execute'}.`,
+            success ? 'success' : 'error'
+          );
+
+          setMessages(m => [...m, {
+            id: Date.now().toString() + '-' + id,
+            role: 'assistant',
+            content: `Script [${script.name}] execution ${success ? 'completed successfully' : 'failed'}.\nOutput: ${success ? 'All checks passed.' : 'Error: Resource unavailable.'}`,
+            timestamp: Date.now(),
+            type: success ? 'status' : 'error'
+          }]);
+        }
+        return updated;
+      });
+    }, 2000);
+  }, [notify, scripts]);
+
+  // Automatic script execution every 3 minutes
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setScripts(currentScripts => {
+        currentScripts.forEach(script => {
+          runScript(script.id);
+        });
+        return currentScripts;
+      });
+    }, 180000); // 3 minutes
+    
+    return () => clearInterval(interval);
+  }, [runScript]);
 
   const handleCommand = (command: string) => {
     const cmd = command.toLowerCase().trim();
@@ -176,6 +254,45 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-screen bg-[#0a0a0c] text-gray-200 font-sans overflow-hidden">
+      {/* Notifications Overlay */}
+      <div className="fixed top-6 right-6 z-[100] flex flex-col gap-4 pointer-events-none">
+        <AnimatePresence>
+          {notifications.map((n) => (
+            <motion.div
+              key={n.id}
+              initial={{ opacity: 0, x: 50, scale: 0.9 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 20, scale: 0.95 }}
+              className={`pointer-events-auto w-80 bg-[#111114] border border-gray-800 rounded-2xl p-4 shadow-2xl flex gap-4 ${
+                n.type === 'success' ? 'border-green-500/30 bg-green-500/5' :
+                n.type === 'error' ? 'border-red-500/30 bg-red-500/5' :
+                'border-blue-500/30 bg-blue-500/5'
+              }`}
+            >
+              <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
+                n.type === 'success' ? 'bg-green-500/20 text-green-400' :
+                n.type === 'error' ? 'bg-red-500/20 text-red-400' :
+                'bg-blue-500/20 text-blue-400'
+              }`}>
+                {n.type === 'success' ? <CheckCircle2 className="w-5 h-5" /> :
+                 n.type === 'error' ? <XCircle className="w-5 h-5" /> :
+                 <Info className="w-5 h-5" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="text-sm font-bold text-white truncate">{n.title}</h4>
+                <p className="text-xs text-gray-400 mt-1 leading-relaxed">{n.message}</p>
+              </div>
+              <button 
+                onClick={() => setNotifications(prev => prev.filter(notif => notif.id !== n.id))}
+                className="flex-shrink-0 p-1 hover:bg-gray-800 rounded-lg transition-colors h-fit"
+              >
+                <X className="w-4 h-4 text-gray-500" />
+              </button>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+
       {/* Sidebar */}
       <aside className="w-64 bg-[#111114] border-r border-gray-800 flex flex-col hidden md:flex">
         <div className="p-6 flex items-center gap-3 border-b border-gray-800">
@@ -202,6 +319,13 @@ const App: React.FC = () => {
           >
             <LayoutDashboard className="w-5 h-5" />
             <span className="font-medium">Infrastructure</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('scripts')}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === 'scripts' ? 'bg-blue-600/10 text-blue-400 border border-blue-600/20' : 'hover:bg-gray-800 text-gray-400'}`}
+          >
+            <FileCode className="w-5 h-5" />
+            <span className="font-medium">Scripts Tool</span>
           </button>
           <div className="pt-4 pb-2 px-4 text-[10px] text-gray-600 uppercase font-bold tracking-widest">System</div>
           <button 
@@ -245,9 +369,10 @@ const App: React.FC = () => {
               <Bot className="w-5 h-5 text-white" />
             </div>
             <h2 className="font-semibold text-white">
-              {activeTab === 'chat' ? 'DevOps ChatBot' : 
+              {activeTab === 'chat' ? 'DevSecOps Assistant' : 
                activeTab === 'dashboard' ? 'Infrastructure Dashboard' :
-               activeTab === 'monitoring' ? 'System Monitoring' : 'Security Audit'}
+               activeTab === 'monitoring' ? 'System Monitoring' : 
+               activeTab === 'scripts' ? 'Script Management' : 'Security Audit'}
             </h2>
           </div>
           <div className="flex items-center gap-3">
@@ -435,6 +560,77 @@ const App: React.FC = () => {
                         ))}
                       </div>
                     </div>
+                  </div>
+                </div>
+              </motion.div>
+            ) : activeTab === 'scripts' ? (
+              <motion.div 
+                key="scripts"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                className="max-w-6xl mx-auto space-y-8"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {scripts.map((script) => (
+                    <div key={script.id} className="bg-[#111114] border border-gray-800 p-6 rounded-3xl hover:border-gray-700 transition-all group">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="bg-blue-500/10 p-3 rounded-2xl">
+                          <FileCode className="w-6 h-6 text-blue-400" />
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {script.status === 'running' && (
+                            <RefreshCw className="w-4 h-4 text-blue-400 animate-spin" />
+                          )}
+                          {script.status === 'success' && (
+                            <CheckCircle2 className="w-4 h-4 text-green-500" />
+                          )}
+                          {script.status === 'error' && (
+                            <XCircle className="w-4 h-4 text-red-500" />
+                          )}
+                          <span className={`text-[10px] font-bold uppercase tracking-widest ${
+                            script.status === 'running' ? 'text-blue-400' :
+                            script.status === 'success' ? 'text-green-500' :
+                            script.status === 'error' ? 'text-red-500' : 'text-gray-600'
+                          }`}>
+                            {script.status}
+                          </span>
+                        </div>
+                      </div>
+                      <h3 className="text-lg font-bold text-white mb-1">{script.name}</h3>
+                      <p className="text-xs text-gray-500 font-mono mb-4">{script.path}</p>
+                      <p className="text-sm text-gray-400 mb-6 leading-relaxed">{script.description}</p>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-gray-600 font-medium">
+                          {script.lastRun ? `Last run: ${new Date(script.lastRun).toLocaleTimeString()}` : 'Never run'}
+                        </span>
+                        <button 
+                          onClick={() => runScript(script.id)}
+                          disabled={script.status === 'running'}
+                          className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-gray-800 text-white text-xs font-bold rounded-xl transition-all"
+                        >
+                          <Play className="w-3.5 h-3.5" />
+                          Run Script
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-[#111114] border border-gray-800 rounded-3xl p-8">
+                  <h3 className="text-xl font-bold text-white mb-6 flex items-center gap-3">
+                    <Terminal className="w-6 h-6 text-blue-400" />
+                    Global Execution Log
+                  </h3>
+                  <div className="bg-black/50 rounded-2xl p-6 font-mono text-xs text-gray-400 space-y-2 border border-gray-800/50 h-64 overflow-y-auto scrollbar-hide">
+                    <p className="text-blue-400">[SYSTEM] DevSecOps Script Tool v1.0.0 initialized.</p>
+                    <p className="text-gray-600">[INFO] Waiting for user input...</p>
+                    {messages.filter(m => m.type === 'status' || m.type === 'error').map((m, i) => (
+                      <p key={i} className={m.type === 'error' ? 'text-red-400' : 'text-green-400'}>
+                        [{new Date(m.timestamp).toLocaleTimeString()}] {m.content}
+                      </p>
+                    ))}
                   </div>
                 </div>
               </motion.div>

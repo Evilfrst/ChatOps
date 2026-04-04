@@ -1,5 +1,5 @@
 {
-  "name": "ChatOps DevOps - AI Chatbot",
-  "description": "An intelligent ChatOps chatbot for DevOps automation, featuring real-time AI assistance and simulated infrastructure management.",
+  "name": "DevSecOps Script Tool",
+  "description": "A comprehensive dashboard for managing DevSecOps scripts, including system checks, network diagnostics, and security auditing.",
   "requestFramePermissions": []
 }
